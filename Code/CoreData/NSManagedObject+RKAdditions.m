@@ -25,4 +25,36 @@
     return [vals count] == 0;
 }
 
+- (void)copyTransientAttributesFromManagedObject:(NSManagedObject *)managedObject
+{
+    static NSMutableDictionary *transientAttributesMap = nil;
+    
+    if (!transientAttributesMap) {
+        transientAttributesMap = [[NSMutableDictionary alloc] init];
+    }
+    
+    NSArray *transientAttributes = [transientAttributesMap objectForKey:self.entity.name];
+    
+    if (!transientAttributes) {
+        NSEntityDescription *entity = [self entity];
+        
+        NSMutableArray *keys = [[NSMutableArray alloc] init];
+        for (NSString *key in entity.attributesByName) {
+            NSAttributeDescription *attribute = [entity.attributesByName objectForKey:key];
+            if (attribute.isTransient) {
+                [keys addObject:key];
+            }
+        }
+        transientAttributes = [keys copy];
+        [transientAttributesMap setObject:self.entity.name forKey:transientAttributes];
+    }
+    
+    for (NSString *key in transientAttributes) {
+        id value = [managedObject valueForKey:key];
+        if (value) {
+            [self setValue:value forKey:key];
+        }
+    }
+}
+
 @end

@@ -35,4 +35,9 @@
  */
 - (BOOL)isNew;
 
+/**
+ *  Copies transient values from the specified managedObject
+ */
+- (void)copyTransientAttributesFromManagedObject:(NSManagedObject *)managedObject;
+
 @end

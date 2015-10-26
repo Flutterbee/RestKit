@@ -1,0 +1,4 @@
+# Install via CocoaPods pointing at current local codebase
+pod 'RestKit/Network', :path => '../../'
+pod 'RestKit/ObjectMapping', :path => '../../'
+pod 'RestKit/CoreData', :path => '../../'

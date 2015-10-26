@@ -12,7 +12,7 @@
 #import "RKHuman.h"
 #import "RKCat.h"
 
-@interface RKMappingTestTest : SenTestCase
+@interface RKMappingTestTest : XCTestCase
 @property (nonatomic, strong) id objectRepresentation;
 @property (nonatomic, strong) RKMappingTest *mappingTest;
 @end
@@ -62,6 +62,14 @@
         return [mappedValue isEqualToString:@"Blake Watters"];
     }]];
     expect([self.mappingTest evaluate]).to.equal(YES);
+}
+
+- (void)testMappingTestFailureForAttributeWithBlock
+{
+    [self.mappingTest addExpectation:[RKPropertyMappingTestExpectation expectationWithSourceKeyPath:@"name" destinationKeyPath:@"name" evaluationBlock:^BOOL(RKPropertyMappingTestExpectation *expectation, RKPropertyMapping *mapping, id mappedValue, NSError *__autoreleasing *error) {
+        return [mappedValue isEqualToString:@"Invalid"];
+    }]];
+    expect([self.mappingTest evaluate]).to.equal(NO);
 }
 
 - (void)testMappingTestForRelationship

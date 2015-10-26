@@ -112,6 +112,19 @@
     assertThatBool([mapping1 isEqualToMapping:mapping2], is(equalToBool(NO)));
 }
 
+- (void)testThatTwoMappingsWithNilSourceKeyPathAreConsideredEqual
+{
+    RKObjectMapping *relationshipMapping1 = [RKObjectMapping mappingForClass:[NSNumber class]];
+    RKObjectMapping *relationshipMapping2 = [RKObjectMapping mappingForClass:[NSNumber class]];
+    
+    RKObjectMapping *mapping1 = [RKObjectMapping mappingForClass:[NSString class]];
+    [mapping1 addPropertyMapping:[RKRelationshipMapping relationshipMappingFromKeyPath:nil toKeyPath:@"that" withMapping:relationshipMapping1]];;
+    RKObjectMapping *mapping2 = [RKObjectMapping mappingForClass:[NSString class]];
+    [mapping2 addPropertyMapping:[RKRelationshipMapping relationshipMappingFromKeyPath:nil toKeyPath:@"that" withMapping:relationshipMapping2]];;
+    
+    assertThatBool([mapping1 isEqualToMapping:mapping2], is(equalToBool(YES)));
+}
+
 - (void)testThatAddingAPropertyMappingThatExistsInAnotherMappingTriggersException
 {
     RKObjectMapping *firstMapping = [RKObjectMapping mappingForClass:[NSMutableDictionary class]];
@@ -253,5 +266,18 @@
     
     expect(operation.destinationObject).to.equal(@{ @"Blake": @{} });
 }
+
+- (void)testRemoveAttributeMappingWithNilDestinationKeyPath
+{
+    // This test fails also if we create directly a mapping from "(something) => (null)"
+    // but the inverseMapping case is a more common use case
+    RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[RKTestUser class]];
+    [mapping addPropertyMapping:[RKAttributeMapping attributeMappingFromKeyPath:nil toKeyPath:@"name"]];
+
+    RKObjectMapping *inverseMapping = [mapping inverseMapping];
+    [inverseMapping removePropertyMapping:[inverseMapping mappingForSourceKeyPath:@"name"]];
+    expect([inverseMapping mappingForSourceKeyPath:@"name"]).to.beNil;
+}
+
 
 @end

@@ -27,6 +27,7 @@
 #import "RKInMemoryManagedObjectCache.h"
 #import "RKFetchRequestManagedObjectCache.h"
 #import "NSManagedObjectContext+RKAdditions.h"
+#import "RKManagedObjectStore_Private.h"
 
 // Set Logging Component
 #undef RKLogComponent
@@ -50,13 +51,20 @@ static BOOL RKIsManagedObjectContextDescendentOfContext(NSManagedObjectContext *
     return NO;
 }
 
-static NSSet *RKSetOfManagedObjectIDsFromManagedObjectContextDidSaveNotification(NSNotification *notification)
+NSSet <NSManagedObjectID *> *RKSetOfManagedObjectIDsFromManagedObjectContextDidSaveNotification(NSNotification *notification)
 {
-    NSUInteger count = [[[notification.userInfo allValues] valueForKeyPath:@"@sum.@count"] unsignedIntegerValue];
-    NSMutableSet *objectIDs = [NSMutableSet setWithCapacity:count];
-    for (NSSet *objects in [notification.userInfo allValues]) {
-        [objectIDs unionSet:[objects valueForKey:@"objectID"]];
-    }
+    NSMutableSet <NSManagedObjectID *> *objectIDs = [NSMutableSet set];
+    
+    void (^unionObjectIDs)(NSMutableSet *, NSSet *) = ^(NSMutableSet *objectIDs, NSSet *objects) {
+        if (objects != nil) {
+            [objectIDs unionSet:[objects valueForKey:NSStringFromSelector(@selector(objectID))]];
+        }
+    };
+    
+    unionObjectIDs(objectIDs,notification.userInfo[NSInsertedObjectsKey]);
+    unionObjectIDs(objectIDs,notification.userInfo[NSUpdatedObjectsKey]);
+    unionObjectIDs(objectIDs,notification.userInfo[NSDeletedObjectsKey]);
+    
     return objectIDs;
 }
 
@@ -69,6 +77,14 @@ static NSSet *RKSetOfManagedObjectIDsFromManagedObjectContextDidSaveNotification
 @end
 
 @implementation RKManagedObjectContextChangeMergingObserver
+
+- (instancetype)init
+{
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"-init is not a valid initializer for the class %@, use designated initilizer -initWithObservedContext:mergeContext:", NSStringFromClass([self class])]
+                                 userInfo:nil];
+    return [self init];
+}
 
 - (instancetype)initWithObservedContext:(NSManagedObjectContext *)observedContext mergeContext:(NSManagedObjectContext *)mergeContext
 {
@@ -103,6 +119,31 @@ static NSSet *RKSetOfManagedObjectIDsFromManagedObjectContextDidSaveNotification
     NSAssert([notification object] == self.observedContext, @"Received Managed Object Context Did Save Notification for Unexpected Context: %@", [notification object]);
     if (! [self.objectIDsFromChildDidSaveNotification isEqual:RKSetOfManagedObjectIDsFromManagedObjectContextDidSaveNotification(notification)]) {
         [self.mergeContext performBlock:^{
+            
+            /*
+             Fault updated objects before merging changes into mainQueueManagedObjectContext.
+
+             This enables NSFetchedResultsController to update and re-sort its fetch results and to call its delegate methods
+             in response Managed Object updates merged from another context.
+             See:
+             http://stackoverflow.com/a/3927811/489376
+             http://stackoverflow.com/a/16296365/489376
+             for issue details.
+             */
+            for (NSManagedObject *object in [[notification userInfo] objectForKey:NSUpdatedObjectsKey]) {
+                NSManagedObjectID *objectID = [object objectID];
+                if (objectID && ![objectID isTemporaryID]) {
+                    NSError *error = nil;
+                    NSManagedObject * updatedObject = [self.mergeContext existingObjectWithID:objectID error:&error];
+                    if (error) {
+                        RKLogDebug(@"Failed to get existing object for objectID (%@). Failed with error: %@", objectID, error);
+                    }
+                    else {
+                        [updatedObject willAccessValueForKey:nil];
+                    }
+                }
+            }
+            
             [self.mergeContext mergeChangesFromContextDidSaveNotification:notification];
         }];
     } else {
@@ -156,6 +197,12 @@ static char RKManagedObjectContextChangeMergingObserverAssociationKey;
     return self;
 }
 
+- (instancetype)init
+{
+    NSManagedObjectModel *managedObjectModel = [NSManagedObjectModel mergedModelFromBundles:[NSBundle allBundles]];
+    return [self initWithManagedObjectModel:managedObjectModel];
+}
+
 - (instancetype)initWithPersistentStoreCoordinator:(NSPersistentStoreCoordinator *)persistentStoreCoordinator
 {
     self = [self initWithManagedObjectModel:persistentStoreCoordinator.managedObjectModel];
@@ -164,12 +211,6 @@ static char RKManagedObjectContextChangeMergingObserverAssociationKey;
     }
 
     return self;
-}
-
-- (instancetype)init
-{
-    NSManagedObjectModel *managedObjectModel = [NSManagedObjectModel mergedModelFromBundles:[NSBundle allBundles]];
-    return [self initWithManagedObjectModel:managedObjectModel];
 }
 
 - (void)dealloc
@@ -326,8 +367,6 @@ static char RKManagedObjectContextChangeMergingObserverAssociationKey;
 
 - (void)recreateManagedObjectContexts
 {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSManagedObjectContextDidSaveNotification object:self.persistentStoreManagedObjectContext];
-
     self.persistentStoreManagedObjectContext = nil;
     self.mainQueueManagedObjectContext = nil;
     [self createManagedObjectContexts];

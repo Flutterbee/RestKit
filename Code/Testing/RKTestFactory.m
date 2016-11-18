@@ -18,7 +18,7 @@
 //  limitations under the License.
 //
 
-#import "AFHTTPClient.h"
+#import "AFRKHTTPClient.h"
 #import "RKTestFactory.h"
 #import "RKLog.h"
 #import "RKObjectManager.h"
@@ -26,11 +26,9 @@
 #import "RKMIMETypeSerialization.h"
 #import "RKObjectRequestOperation.h"
 
-#ifdef _COREDATADEFINES_H
-#if __has_include("RKCoreData.h")
+#if __has_include("CoreData.h")
 #define RKCoreDataIncluded
 #import "RKManagedObjectStore.h"
-#endif
 #endif
 
 // Expose MIME Type singleton and initialization routine
@@ -113,9 +111,9 @@
 - (void)defineDefaultFactories
 {
     [self defineFactory:RKTestFactoryDefaultNamesClient withBlock:^id {
-        __block AFHTTPClient *client;
+        __block AFRKHTTPClient *client;
         RKLogSilenceComponentWhileExecutingBlock(RKlcl_cRestKitSupport, ^{
-            client = [AFHTTPClient clientWithBaseURL:self.baseURL];
+            client = [AFRKHTTPClient clientWithBaseURL:self.baseURL];
         });
 
         return client;
@@ -256,9 +254,13 @@
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     }
-
-    // Clear the NSURLCache
-    [[NSURLCache sharedURLCache] removeAllCachedResponses];
+    // Check for and remove -shm and -wal files
+    for (NSString *suffix in @[ @"-shm", @"-wal" ]) {
+        NSString *supportFilePath = [path stringByAppendingString:suffix];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:supportFilePath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:supportFilePath error:nil];
+        }
+    }
 
     if ([RKTestFactory sharedFactory].setUpBlock) [RKTestFactory sharedFactory].setUpBlock();
 }
@@ -269,7 +271,6 @@
 
     // Cancel any network operations and clear the cache
     [[RKObjectManager sharedManager].operationQueue cancelAllOperations];
-    [[NSURLCache sharedURLCache] removeAllCachedResponses];
 
     // Cancel any object mapping in the response mapping queue
     [[RKObjectRequestOperation responseMappingQueue] cancelAllOperations];
@@ -277,7 +278,7 @@
 #ifdef RKCoreDataIncluded
     // Ensure the existing defaultStore is shut down
     [[NSNotificationCenter defaultCenter] removeObserver:[RKManagedObjectStore defaultStore]];
-    
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     if ([[RKManagedObjectStore defaultStore] respondsToSelector:@selector(stopIndexingPersistentStoreManagedObjectContext)]) {

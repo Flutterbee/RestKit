@@ -150,6 +150,14 @@ static RKSourceToDesinationKeyTransformationBlock defaultSourceToDestinationKeyT
     });
 }
 
+// Compiler requires we override this.
+- (instancetype)init
+{
+    self = [self initWithClass:nil];
+    NSAssert(NO, @"Failed to call designated initializer of %@", self);
+    return self;
+}
+
 - (instancetype)initWithClass:(Class)objectClass
 {
     self = [super init];
@@ -365,7 +373,7 @@ static NSArray *RKRemoveProperty(NSArray *array, RKPropertyMapping *mapping)
         self.keyAttributeMappings = RKRemoveProperty(self.keyAttributeMappings, attributeOrRelationshipMapping);
         self.keyPathAttributeMappings = RKRemoveProperty(self.keyPathAttributeMappings, attributeOrRelationshipMapping);
         [self.propertiesBySourceKeyPath removeObjectForKey:attributeOrRelationshipMapping.sourceKeyPath ?: [NSNull null]];
-        [self.propertiesByDestinationKeyPath removeObjectForKey:attributeOrRelationshipMapping.destinationKeyPath];
+        [self.propertiesByDestinationKeyPath removeObjectForKey:attributeOrRelationshipMapping.destinationKeyPath ?: [NSNull null]];
     }
 }
 
@@ -458,7 +466,7 @@ static NSArray *RKRemoveProperty(NSArray *array, RKPropertyMapping *mapping)
     if ([self.propertyMappings count] != [otherMapping.propertyMappings count]) return NO;
 
     for (RKPropertyMapping *propertyMapping in self.propertyMappings) {
-        RKPropertyMapping *otherPropertyMapping = [otherMapping mappingForSourceKeyPath:propertyMapping.sourceKeyPath];
+        RKPropertyMapping *otherPropertyMapping = [otherMapping mappingForDestinationKeyPath:propertyMapping.destinationKeyPath];
         if (! [propertyMapping isEqualToMapping:otherPropertyMapping]) return NO;
     }
 
